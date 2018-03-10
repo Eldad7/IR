@@ -65,3 +65,11 @@ div{
 .checkbox p{
     text-align: left;
 }
+
+ul{
+    text-decoration: none;
+}
+ul li{
+  display: inline;
+  cursor:pointer;
+}

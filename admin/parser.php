@@ -33,7 +33,7 @@
 						$index['index'][$word]['hits'] = 1;
 					}
 					else {
-						array_push($index['index'][$word],$filenumber.','.$key.','.$num);
+						array_push($index['index'][$word]['locations'],$filenumber.','.$key.','.$num);
 						$index['index'][$word]['hits']++;
 					}
 				}
@@ -51,5 +51,5 @@
 	}
 	fclose($fpIndex);
 	unlink('../toparse/'.$filename);
-	header("Location: ".$_SERVER['HTTP_REFERER']);
+	header("Location: ".$_SERVER['HTTP_REFERER'].'?alert=Success');
 ?>
