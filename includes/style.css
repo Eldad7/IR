@@ -38,8 +38,30 @@ div{
 	height: 100px;
 	background-color: #C3BCBA;
 	margin-bottom: 30px;
+    text-align: center;
 }
 
 .searchbuttons{
 	margin-top: 15px;
+}
+
+.files{
+    margin-top: 15px;
+    margin-bottom: 15px;
+    border-width: 3px;
+    border-color: #F0F0F0;
+    border-style: solid;
+    width: 300px;
+    height:100px;
+    position: relative;
+    background-color: #C3BCBA;
+}
+
+.checkbox{
+    position: absolute;
+    width: 20px;
+    height: 20px;
+}
+.checkbox p{
+    text-align: left;
 }
