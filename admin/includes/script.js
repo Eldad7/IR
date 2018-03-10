@@ -41,7 +41,7 @@ $(document).ready(function(){
 		$('li').on('click', function(){
 			var currentCounter = $(this).attr('id');
 			var html = '<div class="row-md-4">';
-			for (i=currentCounter-1;i<fileItems.length;i++){
+			for (i=currentCounter;i<fileItems.length;i++){
 				html+=fileItems[i];
 			}
 			var counter = 1;
@@ -49,6 +49,7 @@ $(document).ready(function(){
 				html+='<li id="'+i+'">'+counter+'</li>';
 				i+=4;
 			}
+			console.log(html);
 			$('main').html(html);
 			$('li').find('#'+currentCounter).attr('font-weight','bold');
 		})

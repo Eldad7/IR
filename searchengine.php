@@ -1,5 +1,6 @@
 <?php
 	$string = $_GET['search'];
+	echo '<pre>'.$string.'</pre>';
 	$fpIndex = fopen('db/index.json', 'r+');
 	$index = (array)json_decode(fread($fpIndex, filesize('db/index.json')),true);
 	$string = str_replace(array('.',';',',',':','"',"'",'!','?','/','\n','\r','\n\r','','`'), '', $string);
@@ -9,67 +10,98 @@
 	$orArray = array();
 	$wordArray = array();
 	$notArray = array();
-	foreach ($wordsArr as $words){
-		$words = trim($words);
-		$tmpArray = explode(')',$words);
-		foreach ($tmpArray as $key => $value) {
-			$value = trim($value);
-			/*if (strpos($value, '+')<strlen($value))
-				array_push($andArray,$tmpArray[$key-1]);
-			else if()*/
-			array_push($wordArray,explode(' ', $value));
-		}
-	}
 	$wordsArray = array();
 	$toSearchArray = array();
-	$orFlag = false;
-	$notFlag = false;
-	$andFlag = false;
-	foreach ($wordArray as $words) {
-		print_r($words);
-		foreach ($words as $key => $value) {
-			$value = trim($value);
-			if($andFlag){
-				array_push($andArray,$value);
-				array_push($toSearchArray, $andArray);
-				$andArray = array();
-				$andFlag = false;
-			}
-
-			elseif($orFlag){
-				array_push($orArray,$value);
-				array_push($toSearchArray, $orArray);
-				$orArray = array();
-				$orFlag = false;
-			}
-
-			elseif($notFlag){
-				array_push($notArray,$value);
-				$notFlag = false;
-			}
-			if (strcmp($value, '+')==0){
-				array_push($andArray,$wordsArray[count($wordsArray)-1].' + ');
-				$andFlag = true;
-				continue;
-			}
-			if (strcmp($value, '|')==0){
-				array_push($orArray,$wordsArray[count($wordsArray)-1].' | ');
-				$orFlag = true;
-				continue;
-			}
-			if (strcmp($value, '-')==0){
-				$andFlag = true;		
-				continue;	
-			}
-			array_push($wordsArray,$value);
+	$parenthesisFlag = false;
+	$wordsArray = explode(' ', $string);
+	$tempArray = array();
+	$tmpLocator = 0;
+	foreach ($wordsArray as $key => $value) {
+		$tmpLocator += strpos(substr($string, $tmpLocator),$value);
+		if (strcmp('(',substr($value, 0,1))==0){
+			//echo $value.PHP_EOL;
+			parenthesis(explode(')', substr($string, $tmpLocator)));
 		}
 	}
-	echo "<pre>";
-	print_r($wordsArray);
-	echo "</pre>";
-	echo "<pre>";
-	print_r($toSearchArray);
-	echo "</pre>";
+
+	function parenthesis($arr){
+		$array = explode(' ', $arr[0]);
+		echo '<pre>';
+		print_r($array);
+		echo '</pre>';
+		$tempArray = array();
+		$orFlag = false;
+		$andFlag = false;
+		foreach ($array as $key => $value) {
+			$value = str_replace('(', '', $value);
+
+			if (strcmp('+',$value)==0){
+				$andFlag = true;
+			}
+			else if (strcmp('|',$value)==0){
+				$orFlag = true;
+			}
+			else{
+				foreach ($GLOBALS['index']['index'] as $word => $positions) {
+					if (strcmp($value,$word)==0){
+						array_push($tempArray,$positions['locations']);
+						break;
+					}
+				}
+			}
+			//unset($GLOBALS['wordsArray'][$key]);
+		}
+		$firstWord = array();
+		$secondWord = array();
+		$flag = true;
+		foreach ($tempArray as $tmpArray) {
+			foreach ($tmpArray as $key => $value){
+				$locations = explode(',',$value);
+				if ($flag){
+					$firstWord[$locations[0]] = array();
+					array_push($firstWord[$locations[0]],$locations[1].','.$locations[2]);
+				}
+				else{
+					$secondWord[$locations[0]] = array();
+					array_push($secondWord[$locations[0]],$locations[1].','.$locations[2]);
+				}
+			}
+			$flag = false;
+		}
+
+		if ($andFlag){	
+			foreach ($firstWord as $key => $value) {
+				if (!array_key_exists($key, $secondWord)){
+					unset($firstWord[$key]);
+				}
+			}
+			echo '<pre>';
+			print_r($firstWord);
+			echo '</pre>';	
+		}
+		if ($orFlag){
+			foreach ($secondWord as $key => $file) {
+				foreach ($file as $fkey => $value) {
+					if (!isset($firstWord[$key]))
+						$firstWord[$key] = array();
+					array_push($firstWord[$key],$value);
+				}
+			}
+			echo '<pre>';
+			print_r($firstWord);
+			echo '</pre>';
+		}
+		return($firstWord);
+	}
+	function key_compare_func($key1, $key2)
+	{
+	    if ($key1 == $key2)
+	        return 0;
+	    else if ($key1 > $key2)
+	        return 1;
+	    else
+	        return -1;
+	}
 	/*
 		$wordArr = explode('(',$string);
 		$andArray = array();
@@ -178,61 +210,16 @@
 			if (!isset($resultArray[$file]))
 				$resultArray[$file] = array($index['files'][$file],$preview);
 		}
+		$counter = 0;
+    	foreach ($resultArray as $key => $value) {
+    		echo "<div><h1><a href ='db/".$key.".txt' target=_blank>".substr($value[0]['name'], 0,strpos($value[0]['name'], '.txt'))."</a></h1>";
+    		echo "<h6>By ".$value[0]['author']."</h6>";
+    		echo "<h4>".$value[1].'</h4></div>';
+    		if (++$counter==0){
+    			$stopper=$key;
+    			break;
+    		}
+    	}
 	}*/
 	fclose($fpIndex);
 ?>
-
-<!DOCTYPE html>
-<html>
-	<head>
-		<meta charset="utf-8">
-		<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
-		<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
-		<script src="includes/script.js"></script>
-		<link rel="stylesheet" href="includes/style.css">
-		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
-	</head>
-	<body>
-		<header class="top">
-			<div class="container">
-			  <div class="row">
-			    <div class="col-xs-4">
-			    </div>
-			    <div class="searchbuttons col-xs-4 text-center">
-			        <button id='and'>AND</button>
-					<button id='or'>OR</button>
-					<button id='not'>NOT</button>
-					<div>
-						<form action="searchengine.php" method="GET">
-							<input type="text" name="search" value="<?php echo $string;?>">
-							<input type="submit" name="submit">
-						</form>
-					</div>
-			    </div>
-			  </div>
-			</div>
-		</header>
-		<main>
-		<div class="container">
-			<div class="row">
-			    <div class="col-l-2">
-			    </div>
-			    <div class="col-l-2 text-center">
-			    <?php
-			    	$counter = 0;
-			    	foreach ($resultArray as $key => $value) {
-			    		echo "<div><h1><a href ='db/".$key.".txt' target=_blank>".substr($value[0]['name'], 0,strpos($value[0]['name'], '.txt'))."</a></h1>";
-			    		echo "<h6>By ".$value[0]['author']."</h6>";
-			    		echo "<h4>".$value[1].'</h4></div>';
-			    		if (++$counter==0){
-			    			$stopper=$key;
-			    			break;
-			    		}
-			    	}
-			    ?>
-			    </div>
-			</div>
-		</div>
-		</main>
-	</body>
-</html>
