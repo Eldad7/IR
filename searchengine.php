@@ -51,47 +51,48 @@
 			}
 			//unset($GLOBALS['wordsArray'][$key]);
 		}
-		$firstWord = array();
-		$secondWord = array();
-		$flag = true;
-		foreach ($tempArray as $tmpArray) {
+		$words = array();
+		foreach ($tempArray as $tmpKey => $tmpArray) {
+			$words[$tmpKey] = array();
 			foreach ($tmpArray as $key => $value){
 				$locations = explode(',',$value);
-				if ($flag){
-					$firstWord[$locations[0]] = array();
-					array_push($firstWord[$locations[0]],$locations[1].','.$locations[2]);
+				if (!isset($words[$tmpKey][$locations[0]])){
+					$words[$tmpKey][$locations[0]] = array();
 				}
-				else{
-					$secondWord[$locations[0]] = array();
-					array_push($secondWord[$locations[0]],$locations[1].','.$locations[2]);
-				}
+				array_push($words[$tmpKey][$locations[0]],$locations[1].','.$locations[2]);
 			}
-			$flag = false;
+			
 		}
-
 		if ($andFlag){	
-			foreach ($firstWord as $key => $value) {
-				if (!array_key_exists($key, $secondWord)){
-					unset($firstWord[$key]);
+			foreach ($words[0] as $key => $value) {
+				for ($i=1; $i <count($words) ; $i++) { 
+					if (!array_key_exists($key, $words[$i])){
+						unset($words[0][$key]);
+					}
+					else{
+						foreach ($words[$i][$key] as $innerkey => $value) {
+							array_push($words[0][$key],$value);
+						}
+						
+					}
 				}
 			}
-			echo '<pre>';
-			print_r($firstWord);
-			echo '</pre>';	
 		}
 		if ($orFlag){
-			foreach ($secondWord as $key => $file) {
-				foreach ($file as $fkey => $value) {
-					if (!isset($firstWord[$key]))
-						$firstWord[$key] = array();
-					array_push($firstWord[$key],$value);
+			for ($i=1; $i < count($words); $i++) { 
+				foreach ($words[$i] as $key => $value) {
+					if (!array_key_exists($key, $words[0]))
+						$words[0][$key] = array();
+					foreach ($words[$i][$key] as $innerkey => $value) {
+						array_push($words[0][$key],$value);
+					}
 				}
 			}
-			echo '<pre>';
-			print_r($firstWord);
-			echo '</pre>';
 		}
-		return($firstWord);
+		echo '<pre>';
+		print_r($words[0]);
+		echo '</pre>';
+		return($words[0]);
 	}
 	function key_compare_func($key1, $key2)
 	{
