@@ -41,15 +41,21 @@
 		}
 		rewind($fpIndex);
 		rewind($fpFile);
+
 		$fpNewFile = fopen('../db/'.$filenumber.'.txt','w');
-		$index['files'][$filenumber] = array('name' => $filename,'author' => $author, 'hidden' => 0);
+		fwrite($fpNewFile, fread($fpFile,filesize('../toparse/'.$filename)));
+		fclose($fpNewFile);
+		rewind($fpFile);
+		$index['files'][$filenumber] = array('name' => $filename,'author' => $author, 'hidden' => 0, 'preview' => fread($fpFile,150));
 		ksort($index['index']);
 		fwrite($fpIndex, json_encode($index));
-		fwrite($fpNewFile, fread($fpFile,filesize('../toparse/'.$filename)));
-		fclose($fpFile);
-		fclose($fpNewFile);
+		fclose($fpFile);		
 	}
+	
 	fclose($fpIndex);
 	unlink('../toparse/'.$filename);
-	header("Location: ".$_SERVER['HTTP_REFERER'].'?alert=Success');
+	$url = $_SERVER['HTTP_REFERER'];
+	if (!strpos($url, '?'))
+		$url.='?alert=Success';
+	header("Location: ".$url);
 ?>

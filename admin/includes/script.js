@@ -75,7 +75,7 @@ $(document).ready(function(){
 		  $.each( data, function( key, val ) {
 		  	if (val!= '.' && val!='..'){
 		  		val=$.trim(val.replace('.txt',''));
-		  		details.push('<form action="parser.php", method="POST"><div class="col"><div class="row-md-4"><label for="input">File:</label><input type="text" name="filename" value="'+val+'"></div><div class="row-md-4"><label for="input">Author:</label><input type="text" name="author" value=""></div></div><input type="submit"></input></form>');
+		  		details.push('<form action="parser.php", method="POST"><div class="col"><div class="row-md-4"><label for="input">File:</label><input type="text" name="filename" value="'+val+'" readonly></div><div class="row-md-4"><label for="input">Author:</label><input type="text" name="author" value=""></div></div><input type="submit"></input></form>');
 		  		list.push('<option id="'+key+'" value="'+val+'">'+val+'</option>');
 		  	}
 		  });
