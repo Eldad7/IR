@@ -1,6 +1,7 @@
 <?php
-	$string = $_GET['search'];
-	echo '<pre>'.$string.'</pre>';
+	$string = isset($_GET['search']) ? $_GET['search'] : '';
+	//echo '<pre>'.$string.'</pre>';
+	//Open Index and stop words
 	$fpIndex = fopen('db/index.json', 'r+');
 	$index = (array)json_decode(fread($fpIndex, filesize('db/index.json')),true);
 	fclose($fpIndex);
@@ -9,124 +10,133 @@
 	$fpStopWords = fopen('db/stopwords.json', 'r+');
 	$stopWords = (array)json_decode(fread($fpStopWords, filesize('db/stopwords.json')),true);
 	fclose($fpStopWords);
-	$string = str_replace(array('.',';',',',':','"',"'",'!','?','/','\n','\r','\n\r','','`'), '', $string);
+	//Remove unsearchable characters for index search
+	$string = str_replace(array('.',';',',',':','"',"'",'!','?','/','\n','\r','\n\r','','`','[',']','{','}'), '', $string);
+	//Remove whitespaces
 	$string = trim($string);
+	//Create an array of as many sentences as there are parenthesis
 	$wordsArr = explode('(', $string);
 	$resultsArray = array();
-	$parenthesisFlag = false;
-	$wordsArray = explode(' ', $string);
-	$tempArray = array();
-	$tmpLocator = 0;
-	foreach ($wordsArray as $key => $value) {
-		$tmpLocator += strpos(substr($string, $tmpLocator),$value);
-		if (strcmp('(',substr($value, 0,1))==0){
-			$parenthesisFlag = true;
-			array_push($resultsArray,parenthesis(explode(')', substr($string, $tmpLocator))));
+	//Wordshits will hold all the words of the search and which files contain them and how many times
+	$wordHits = explode(' ', $string);
+	$wordHits = array_unique($wordHits);
+	foreach ($wordHits as $key => $value) {
+		if (!in_array($value, array('+','-','|'))){
+			$value = str_replace(array('(',')'), '', $value);
+			$wordHits[$value] = array();
 		}
-		else{
-			$tmpArray = explode(' ', $value);
-			foreach ($tmpArray as $word) {
-				if ($parenthesisFlag){
-					if (strcmp(')',substr($value,strlen($value)-1)) != 0)
-						break;
-					$parenthesisFlag = false;
-				}
-				if (in_array($word,array('-','+','|'))){
-					array_push($resultsArray,$word);
-				}
-				else{
-					if (!in_array($word, $stopWords)){
-						foreach ($GLOBALS['index']['index'] as $indexWord => $positions) {
-							if (strcmp($indexWord,$word)==0){
-								foreach ($positions['locations'] as $locations){
-									$locationsArray = array();
-									$arr = explode(',', $locations);
-									if (!isset($locationsArray[$arr[0]]))
-										$locationsArray[$arr[0]] = array();
-									array_push($locationsArray[$arr[0]],$arr[1].','.$arr[2]);
-								}
-								array_push($resultsArray,$locationsArray);
-								break;
-							}
-						}
-					}
-					else{
-						array_push($resultsArray,array());
-					}
-				}
-			}
-		}
+		unset($wordHits[$key]);
+	}
+	
+	foreach ($wordsArr as $key => $value) {
+		//For each sentence - we will remove whitespaces and sent it to the calculate function, as words (explode)
+		calculate(explode(' ', trim($value)));
 	}
 
-	echo '<pre>';
-	print_r($resultsArray);
-	echo '</pre>';
-
+	//Array of results to return
 	$returnArray = array();
+	//Behavioral flags
 	$andFlag = false;
 	$notFlag = false;
 	$orFlag = false;
+
+	//ParenthesisFlag will be used for calculations inside results. If it is raised then we calculate only two arrays at a time
+	$parenthesisFlag = false;
 	foreach ($resultsArray as $key => $value) {
+		//For explaining AND and OR, let's say $resultsArray[$key-1] is A and $resultsArray[$key+1] is B
+		//If flag is raised - we are calculating parenthesis and we need not check again the same array
+		//It is true for nested parenthesis since we are breaking it down in results array
+		if ($parenthesisFlag) {
+			$parenthesisFlag = false;
+			continue;
+		}
+		//If any of the flags exists - we will compare the next array to the previous one and then push it to return array
 		if ($andFlag){
-			if (is_array($value) && count($value)>0){
-				foreach ($returnArray as $file => $locations) {
-					if ($notFlag){
-						if (array_key_exists($file, $value)){
-							unset($returnArray[$file]);
-						}
-						$notFlag = false;
-					}
-					else{
-						if (!array_key_exists($file, $value)){
-							unset($returnArray[$file]);
+			//If we have not reached the end of the array
+			if ($key+1<count($resultsArray)){
+				if (is_array($resultsArray[$key+1]) && count($value)>0){
+					foreach ($resultsArray[$key-1] as $file => $locations) {
+						
+						//We are iterating on A. We split this into two cases, if it is and not, or just and
+						//If it is and not - we check array B to see if it contains elements from A, if it does - we remove it
+						//If it's just and - we check array B to see if it contains elements from A, if it doesn't - we remove it
+						//If it does - we add it to A
+						//Eventually we push the results to returnArray
+						if ($notFlag){
+							if (array_key_exists($file, $resultsArray[$key+1])){
+								unset($resultsArray[$key-1][$file]);
+							}
+							$notFlag = false;
 						}
 						else{
-							foreach ($value as $innerkey => $positions) {
-								array_push($returnArray[$file],$positions);
+							if (!array_key_exists($file, $resultsArray[$key+1])){
+								unset($resultsArray[$key-1][$file]);
+							}
+							else{
+								foreach ($resultsArray[$key+1][$file] as $innerFile => $positions) {
+									array_push($resultsArray[$key-1][$file],$positions);
+								}
 							}
 						}
+						if (!array_key_exists($file, $returnArray))
+							$returnArray[$file] = array();
+						foreach ($resultsArray[$key-1][$innerKey] as $location)
+							array_push($returnArray[$file],$location);
 					}
 				}
 			}
 			$andFlag = false;
+			$parenthesisFlag = true;
 			continue;
 		}
 
+
+
 		if ($orFlag){
-			if (is_array($value)){
-				foreach ($value as $key => $files) {
+			//Or not is just like OR so we are not taking that into account
+			//We are checking to see if is NOT OR. If it is just OR - we check B to see if A contains elements
+			//Eventually we are adding B to A 
+			if (is_array($resultsArray[$key+1])){
+				foreach ($resultsArray[$key+1] as $innerKey => $files) {
 					foreach ($files as $file => $locations) {
 						if (!$notFlag){
-							if (!array_key_exists($key, $returnArray))
-								$returnArray[$key] = array();
-							array_push($returnArray[$key],$locations);	
+							if (!array_key_exists($innerKey, $resultsArray[$key-1]))
+								$resultsArray[$key-1][$innerKey] = array();
+							array_push($resultsArray[$key-1][$innerKey],$locations);	
 						}
 					}
+					if (!array_key_exists($innerKey, $returnArray))
+							$returnArray[$innerKey] = array();
+					foreach ($resultsArray[$key-1][$innerKey] as $location)
+						array_push($returnArray[$innerKey],$location);
 				}
 			}	
+			$parenthesisFlag = true;
 			$orFlag = false;
 			continue;
 		}
 
+		//For regular calculations - if returnArray contains the file - append the locations. If not - create and add locations
 		if (is_array($value)){
-			foreach ($value as $key => $files) {
+			foreach ($value as $innerKey => $files) {
 				foreach ($files as $file => $locations) {
 					if (!isset($returnArray[$file]))
-						$returnArray[$key] = array();
-					array_push($returnArray[$key],$locations);
+						$returnArray[$innerKey] = array();
+					array_push($returnArray[$innerKey],$locations);
 				}
 			}
 		}
-		else{
-			if (strcmp($value,'+')==0){
+		//Raise flags if there is a sign - + |
+		if (!is_array($resultsArray[$key+1])){
+			if (strcmp($resultsArray[$key+1],'+')==0){
 				$andFlag = true;
 			}
 
-			if (strcmp($value,'|')==0){
+			if (strcmp($resultsArray[$key+1],'|')==0){
 				$orFlag = true;
 			}
 
-			if (strcmp($value,'-')==0){
+			if (strcmp($resultsArray[$key+1],'-')==0){
 				if ($notflag)
 					$notFlag = false;
 				else
@@ -134,61 +144,60 @@
 			}
 		}
 	}
+
+	//Remove duplicates
+	foreach ($returnArray as $key => $value) {
+		$returnArray[$key] = array_unique($value);
+	}
 	echo '<pre>';
 	print_r($returnArray);
 	echo '</pre>';
 
+	echo '<pre>';
+	print_r($wordHits);
+	echo '</pre>';
 
-	function parenthesis($arr){
-		$array = explode(' ', $arr[0]);
-		/*echo '<pre>';
-		print_r($array);
-		echo '</pre>';*/
+
+	function calculate($arr){
 		$tempArray = array();
-		$orFlag = false;
 		$andFlag = false;
 		//Params for NOT
 		$notFlag = false;
-		$notLocation = 0;
-		$notCounter = -1; //In case of inner parenthesis
-		$array[0] = substr($array[0], 1);
-		foreach ($array as $key => $value) {
-			if (strcmp('(',substr($value, 0,1))==0){
-				$string = implode(' ', $array);
-				$parenthesisArr = parenthesis(explode(')', substr($string, strpos(0, 1))));
-				foreach ($parenthesisArr as $file => $locations){
-					foreach ($locations as $keyArr => $valueArr) {
-						$counter+=1;
-						array_push($tempArray,$file.','.$valueArr);
-					}
-				}
-				$value = '';
-			}
-
-			if ($notFlag && $notLocation==-1){
-				if ($notCounter>0)
-					$notLocation = count($tempArray)-$notCounter-1;
-				else
-					$notLocation = count($tempArray);
-			}
-
+		//For each word in the combination, we remove end of parenthesis if it contains it
+		foreach ($arr as $key => $value) {
+			$value = str_replace(')', '', $value);
+			//If we have a sign (+ - |) and it is not at the end of the combination (FIX for nested parenthesis) - we push the relevant flag to the results array for later use
 			if (strcmp('+',$value)==0){
-				$andFlag = true;
+				if ($key+1==count($arr)){
+					$flagToPush = $value;
+				}
+				else
+					array_push($tempArray,$value);
 			}
 
 			else if (strcmp('|',$value)==0){
-				$orFlag = true;
+
+				if (($key+1)==count($arr))
+					$flagToPush = $value;
+				else
+					array_push($tempArray,$value);
 			}
 
 			else if (strcmp('-',$value)==0){
-				$notFlag = true;
+				if (($key+1)==count($arr))
+					$flagToPush = $value;
+				else
+					array_push($tempArray,$value);
 			}
 
+			//If this is a word we search the index and stopWords to make sure if we need to search it (stopwords first)
 			else{
 				if ((!in_array($value, $GLOBALS['stopWords'])) && (!in_array($value, array('-','+','-')))){
+					//If it's not in stop words - we search the index
 					foreach ($GLOBALS['index']['index'] as $word => $positions) {
 						if (strcmp($value,$word)==0){
-							array_push($tempArray,$positions['locations']);
+							//If found - we push results
+							array_push($tempArray,array($positions['locations'],$value));
 							break;
 						}
 					}
@@ -196,54 +205,90 @@
 			}
 		}
 		$words = array();
+		//For each result from earlier loop we check if it is an array or a sign
+		//If it is an array - we break down the value (locations - file, line, offset), create a position for the file and push the locations, so we will have an array with files as keys and locations as values
 		foreach ($tempArray as $tmpKey => $tmpArray) {
-			$words[$tmpKey] = array();
-			foreach ($tmpArray as $key => $value){
-				$locations = explode(',',$value);
-				if (!isset($words[$tmpKey][$locations[0]])){
-					$words[$tmpKey][$locations[0]] = array();
-				}
-				array_push($words[$tmpKey][$locations[0]],$locations[1].','.$locations[2]);
-			}
-			
-		}
-
-		if ($andFlag){	
-			foreach ($words[0] as $key => $value) {
-				for ($i=1; $i <count($words) ; $i++) {
-					if ($notFlag){
-						if (array_key_exists($key, $words[$i])){
-							unset($words[0][$key]);
-						}
+			if (is_array($tmpArray)){
+				$words[$tmpKey] = array();
+				$words[$tmpKey]['Word'] = $tmpArray[1];
+				foreach ($tmpArray[0] as $key => $value){
+					$locations = explode(',',$value);
+					if (!isset($words[$tmpKey][$locations[0]])){
+						$words[$tmpKey][$locations[0]] = array();
 					}
-					else{
-						if (!array_key_exists($key, $words[$i])){
-							unset($words[0][$key]);
+					array_push($words[$tmpKey][$locations[0]],$locations[1].','.$locations[2]);
+				}
+			}
+			else
+				//Sign - + - |
+				array_push($words,$tmpArray);
+		}
+		//Results array is the final array
+		//We got over it and do same calculations as earlier
+		$resultArray = array();
+		foreach ($words as $files){
+			if (!is_array($files)){
+				if ($files == '+')
+					$andFlag = true;
+				if ($files == '-')
+					$notFlag = true;
+				continue;
+			}
+			//If we have and - we check to see if it's AND NOT or AND and set the results
+			if ($andFlag){	
+				if (count($words)>0){
+					foreach ($resultArray as $key => $value) {
+						if ($notFlag){
+							if (array_key_exists($key, $files)){
+								unset($resultArray[$key]);
+							}
 						}
 						else{
-							foreach ($words[$i][$key] as $innerkey => $value) {
-								array_push($words[0][$key],$value);
+							if (!array_key_exists($key, $files)){
+								unset($resultArray[$key]);
+							}
+							else{
+								foreach ($files as $innerkey => $value) {
+									array_push($resultArray[$key],$value);
+								}
+							}
+						}					
+					}
+				}
+				$andFlag = false;
+			}
+			//If it is OR or regular search
+			else{
+				foreach ($files as $key => $file) {
+					if (is_numeric($key)){
+						if (!$notFlag){
+							if (!array_key_exists($key, $resultArray))
+								$resultArray[$key] = array();
+							foreach ($files[$key] as $innerkey => $value) {
+								array_push($resultArray[$key],$value);
 							}
 						}
 					}
 				}
-			}
-		}
+			} 
 
-		if ($orFlag){
-			for ($i=1; $i < count($words); $i++) { 
-				foreach ($words[$i] as $key => $value) {
-					if (!$notFlag){
-						if (!array_key_exists($key, $words[0]))
-							$words[0][$key] = array();
-						foreach ($words[$i][$key] as $innerkey => $value) {
-							array_push($words[0][$key],$value);
-						}
-					}
+			if ($notFlag)
+				$notFlag = false;
+
+			//Final loop on these hits - we update the wordHits array with the files that contains it and how many times
+			foreach ($files as $key => $value) {
+				if (is_numeric($key)){
+					if (!isset($GLOBALS['wordHits'][$files['Word']][$key]))
+						$GLOBALS['wordHits'][$files['Word']][$key] = 0;
+					$GLOBALS['wordHits'][$files['Word']][$key]++;
 				}
 			}
 		}
-		return($words[0]);
+
+		//We push the results into the global results array, and if we had a flag - we push it after (FIX for nested parenthesis - to keep the order)
+		array_push($GLOBALS['resultsArray'],$resultArray);
+		if (isset($flagToPush))
+			array_push($GLOBALS['resultsArray'],$flagToPush);
 	}
 	/*
 		$wordArr = explode('(',$string);
