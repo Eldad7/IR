@@ -69,8 +69,6 @@
 	foreach ($resultsArray as $key => $value) {
 		if ($andFlag){
 			if (is_array($value) && count($value)>0){
-				print_r($returnArray);
-				print_r($value);
 				foreach ($returnArray as $file => $locations) {
 					if ($notFlag){
 						if (array_key_exists($file, $value)){
@@ -122,16 +120,13 @@
 		else{
 			if (strcmp($value,'+')==0){
 				$andFlag = true;
-				echo 'AND';
 			}
 
 			if (strcmp($value,'|')==0){
 				$orFlag = true;
-				echo 'OR';
 			}
 
 			if (strcmp($value,'-')==0){
-				echo 'NOT';
 				if ($notflag)
 					$notFlag = false;
 				else
