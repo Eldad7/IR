@@ -1,13 +1,52 @@
 <?php
-	$string = isset($_GET['search']) ? $_GET['search'] : '';
-	//echo '<pre>'.$string.'</pre>';
+	$string = isset($_POST['search']) ? $_POST['search'] : '';
+	$unq = isset($_POST['unq']) ? $_POST['unq'] : '';
+	$locator = isset($_POST['locator']) ? $_POST['locator'] : 0;
+	//Array of results to return
+	$returnArray = array();
+	$oldSearch = false;
+	//Open recent searches to see if it exists
+	$fpRecentSearches = fopen('db/recentsearches.json','r+');
+	$recentSearches = (array)json_decode(fread($fpRecentSearches, filesize('db/recentsearches.json')),true);
+	fclose($fpRecentSearches);
+	if ($unq!=''){
+		if (array_key_exists($unq, $recentSearches)){
+			$results = $recentSearches[$unq]['json'];
+			echo json_encode(array('unq' => $unq, 'json' => array_slice($results, $locator,$locator+10)));
+			die();
+		}
+		$oldSearch = true;
+	}
+	//Check top searches, if doesn't exist we go the search in index
+	$fpTopSearches = fopen('db/topsearches.json','r+');
+	$topSearches = (array)json_decode(fread($fpTopSearches, filesize('db/topsearches.json')),true);
+	fclose($fpTopSearches);
+	$bestMatch = 10;
+	//We will use levenshtein algorithm to compare strings
+	foreach (array_slice($topSearches, 0,1000) as $key => $search){
+		$match = abs(levenshtein($string, $search['search'])); //abs(strcmp($string,$search['search']));
+		if ($match==0){
+			$returnArray = $search['results'];
+			$topSearches[$key]['hits']++;
+			$bestMatch = $match;
+			break;
+		}
+		//Match result from string compare
+		if ($match<$bestMatch){
+			$GLOBALS['topResult'] = $key;
+		}
+		$bestMatch = $match;
+	}
+	if (empty($returnArray) && isset($topResult)){
+		$closestResult = $topSearches[$key];
+	}
 	//Open Index and stop words
 	$fpIndex = fopen('db/index.json', 'r+');
 	$index = (array)json_decode(fread($fpIndex, filesize('db/index.json')),true);
 	fclose($fpIndex);
 	//Sort index by Hits
 	arsort($index['index']);
-	$fpStopWords = fopen('db/stopwords.json', 'r+');
+	$fpStopWords = fopen('db/stopwords.json', 'r');
 	$stopWords = (array)json_decode(fread($fpStopWords, filesize('db/stopwords.json')),true);
 	fclose($fpStopWords);
 	//Remove unsearchable characters for index search
@@ -20,6 +59,7 @@
 	//Wordshits will hold all the words of the search and which files contain them and how many times
 	$wordHits = explode(' ', $string);
 	$wordHits = array_unique($wordHits);
+
 	foreach ($wordHits as $key => $value) {
 		if (!in_array($value, array('+','-','|'))){
 			$value = str_replace(array('(',')'), '', $value);
@@ -33,8 +73,6 @@
 		calculate(explode(' ', trim($value)));
 	}
 
-	//Array of results to return
-	$returnArray = array();
 	//Behavioral flags
 	$andFlag = false;
 	$notFlag = false;
@@ -78,10 +116,12 @@
 								}
 							}
 						}
-						if (!array_key_exists($file, $returnArray))
-							$returnArray[$file] = array();
-						foreach ($resultsArray[$key-1][$innerKey] as $location)
-							array_push($returnArray[$file],$location);
+						if (isset($resultsArray[$key-1][$file])){
+							if (!array_key_exists($file, $returnArray))
+								$returnArray[$file] = array();
+							foreach ($resultsArray[$key-1][$file] as $location)
+								array_push($returnArray[$file],$locations);
+						}
 					}
 				}
 			}
@@ -127,20 +167,22 @@
 			}
 		}
 		//Raise flags if there is a sign - + |
-		if (!is_array($resultsArray[$key+1])){
-			if (strcmp($resultsArray[$key+1],'+')==0){
-				$andFlag = true;
-			}
+		if ($key+1<count($resultsArray)){
+			if (!is_array($resultsArray[$key+1])){
+				if (strcmp($resultsArray[$key+1],'+')==0){
+					$andFlag = true;
+				}
 
-			if (strcmp($resultsArray[$key+1],'|')==0){
-				$orFlag = true;
-			}
+				if (strcmp($resultsArray[$key+1],'|')==0){
+					$orFlag = true;
+				}
 
-			if (strcmp($resultsArray[$key+1],'-')==0){
-				if ($notflag)
-					$notFlag = false;
-				else
-					$notFlag = true;
+				if (strcmp($resultsArray[$key+1],'-')==0){
+					if ($notflag)
+						$notFlag = false;
+					else
+						$notFlag = true;
+				}
 			}
 		}
 	}
@@ -149,14 +191,72 @@
 	foreach ($returnArray as $key => $value) {
 		$returnArray[$key] = array_unique($value);
 	}
-	echo '<pre>';
-	print_r($returnArray);
-	echo '</pre>';
 
-	echo '<pre>';
-	print_r($wordHits);
-	echo '</pre>';
+	//In case no results from original search
+	if (isset($closestResult) && empty($resultsArray)){
+		$resultsArray = $closestResult;
+	}
 
+	//Now we create the json to return
+	//We check if what we searched for is a name of a song - if it is we will put it at the top. If not we will put in the one with the largest number of hits
+	$finalResults = array();
+	foreach ($index['files'] as $key => $value) {
+		if (levenshtein($string, $value['name'])<2){
+			$finalResults[$key] = $returnArray[$key];
+			unset($returnArray[$key]);
+			$index['files'][$key]['hits']++;	
+		}
+		if ($value['hits']<1000)
+			break;
+	}
+	//We will sort the rest of the files that we didn't remove by how many hits it had
+	uksort($returnArray, function($a, $b) {
+		$tmpHitsA = 0;
+		$tmpHitsB = 0;
+		foreach ($GLOBALS['wordHits'] as $key => $value) {
+			foreach ($value as $file => $hits) {
+				//We will compare files hit for each file and return the one who has the most hits, and so we sort it
+				if ($file==array_search($a, $GLOBALS['returnArray']))
+					$tmpHitsA++;
+				if ($file==array_search($b, $GLOBALS['returnArray']))
+					$tmpHitsb++;
+			}
+		}
+		return $tmpHitsA - $tmpHitsB;
+	});
+
+	$finalResults += $returnArray;
+
+	$counter = 0;
+	$jsonToSend = array();
+	foreach ($finalResults as $key => $value) {
+		array_push($jsonToSend,array("href" => 'db/'.$key.'.txt','fileName' => $index['files'][$key]['name'], 'author' => $index['files'][$key]['name'], 'preview' => $index['files'][$key]['preview']));
+		if (++$counter==10){
+			break;
+		}
+	}
+
+	//Now we update recent searches and top searches
+	
+	//If this was a match from our top searches
+	//STILL NEEDS WORK!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
+	$fpTopSearches = fopen('db/topsearches.json','w');
+	if ($bestMatch == 0){   		
+		uksort($topSearches, function($a, $b) {return $a['hits'] - $b['hits'];});			
+	}
+	else{
+		array_push($topSearches, array("search" => $_POST['search'],"hits" => 1,"results" => $finalResults));
+	}
+	fwrite($fpTopSearches, json_encode($topSearches));
+	fclose($fpTopSearches);
+	//Recent searches
+	$unq = md5(microtime(true));
+	$fpRecentSearches = fopen('db/recentsearches.json','w');
+	fwrite($fpRecentSearches, json_encode(array($unq => array('json' => $jsonToSend,'expire' => strtotime("+20 minutes")))));
+	fclose($fpRecentSearches);
+
+	//return results
+	echo json_encode(array('unq' => $unq, 'json' => $jsonToSend,'totalResults' => count($finalResults)));
 
 	function calculate($arr){
 		$tempArray = array();
@@ -213,10 +313,12 @@
 				$words[$tmpKey]['Word'] = $tmpArray[1];
 				foreach ($tmpArray[0] as $key => $value){
 					$locations = explode(',',$value);
-					if (!isset($words[$tmpKey][$locations[0]])){
-						$words[$tmpKey][$locations[0]] = array();
+					if ($GLOBALS['index']['files'][$locations[0]]['hidden']!=1){
+						if (!isset($words[$tmpKey][$locations[0]])){
+							$words[$tmpKey][$locations[0]] = array();
+						}
+						array_push($words[$tmpKey][$locations[0]],$locations[1].','.$locations[2]);
 					}
-					array_push($words[$tmpKey][$locations[0]],$locations[1].','.$locations[2]);
 				}
 			}
 			else
@@ -290,123 +392,4 @@
 		if (isset($flagToPush))
 			array_push($GLOBALS['resultsArray'],$flagToPush);
 	}
-	/*
-		$wordArr = explode('(',$string);
-		$andArray = array();
-		$orArray = array();
-		foreach ($wordArr as $key => $value) {
-			$txtArr = explode(' ',$value);
-			foreach ($txtArr as $key => $value) {
-				if (strpos($value, '|')>0){
-					array_push($orArray,$value[$key-1]);
-					array_push($andArray,$value[$key]);
-				}
-				else{
-					array_push($andArray,$value[$key-1])
-				}
-			}
-
-			/oreach ($txtArr as $key => $value) {
-				foreach ($index['index'] as $word => $positions) {
-					if (strcmp($value,$word)==0){
-						array_push($tempArray,$positions);
-						break;
-					}
-				}
-				
-		}
-	*/
-	/*$txtArr = explode(' ', $string);
-	$tempArray = array();
-	foreach ($txtArr as $key => $value) {
-		foreach ($index['index'] as $word => $positions) {
-			if (strcmp($value,$word)==0){
-				array_push($tempArray,$positions);
-				break;
-			}
-		}
-		
-	}
-	$stringArray = array();
-	foreach ($tempArray as $tmp) {
-		foreach ($tmp as $key => $value) {
-			array_push($stringArray,$value);
-		}
-	}
-	sort($stringArray);
-	$filesArray = array();
-	foreach ($stringArray as $key => $value) {
-		$locations = explode(',',$value);
-		if (isset($filesArray[$locations[0]][$locations[1]]))
-			array_push($filesArray[$locations[0]][$locations[1]],$locations[2]);
-		else{
-			$filesArray[$locations[0]][$locations[1]] = array();
-			array_push($filesArray[$locations[0]][$locations[1]],$locations[2]);
-		}
-	}
-	$sequenceArray = array();
-	foreach ($filesArray as $key => $line) {
-		foreach ($line as $position => $value) {
-			if (count($value)>0){
-				$seq = 1;
-				for ($i=0; $i < count($value)-1; $i++) { 
-					if ($value[$i]+1 == $value[$i+1]){
-						$seq++;
-					}
-				}
-				
-				if (isset($sequenceArray[$seq][$key])){
-					if ($seFquenceArray[$seq][$key] < $seq){
-						$sequenceArray[$seq][$key] = $position;
-					}
-				}
-				else{
-					$sequenceArray[$seq][$key] = $position;
-				}
-				
-			}
-		}
-	}
-	krsort($sequenceArray);
-	$resultArray = array();
-	foreach ($sequenceArray as $sequence => $files) {
-		foreach ($files as $file => $line) {
-			$fp = fopen('db/'.$file.'.txt', 'r');
-			$preview = '';
-			if ($line<2){
-				for ($i=0; $i < 4; $i++) { 
-					if ($i == $line)
-						$preview.='<i>';
-					$preview.=trim(fgets($fp));
-					if ($i == $line)
-						$preview.='</i>';
-					$preview.='<br/>';
-				}
-			}
-			else{
-				for ($i=0; $i<$line-1; $i++)
-					fgets($fp);
-				for ($i=0; $i < 4; $i++) {
-					if ($i == $line)
-						$preview.='<i>';
-					$preview.=trim(fgets($fp));
-					if ($i == $line)
-						$preview.='</i>';
-					$preview.='<br/>';
-				}
-			}
-			if (!isset($resultArray[$file]))
-				$resultArray[$file] = array($index['files'][$file],$preview);
-		}
-		$counter = 0;
-    	foreach ($resultArray as $key => $value) {
-    		echo "<div><h1><a href ='db/".$key.".txt' target=_blank>".substr($value[0]['name'], 0,strpos($value[0]['name'], '.txt'))."</a></h1>";
-    		echo "<h6>By ".$value[0]['author']."</h6>";
-    		echo "<h4>".$value[1].'</h4></div>';
-    		if (++$counter==0){
-    			$stopper=$key;
-    			break;
-    		}
-    	}
-	}*/
 ?>
