@@ -1,4 +1,4 @@
-var query = null, queryString = [], unqIdentifier = null, resultsLocator=0;
+var query = null, queryString = [], unqIdentifier = null, resultsLocator=0, counter=1;
 
 $(document).ready(function(){
 	//Get search parameter and sent to server
@@ -7,11 +7,13 @@ $(document).ready(function(){
         .split("&")
         .forEach(function (item) {
           queryString = item.split("=");
-          if (queryString[0] === 'search')
+          
+          if (queryString[0] === 'search'){
+          	queryString[1] = queryString[1].replace(/\+/g,' ');
           	query = decodeURIComponent(queryString[1]);
+          }
         });
-
-
+    $( "input[name=search]" ).val(query);
 	$('#or').on('click', function(){
 		$('#search').val($('#search').val()+' | ');
 	});
@@ -26,45 +28,52 @@ $(document).ready(function(){
 		url:'searchengine.php',
 		data:{search:query},
 		success:function(data){
+			console.log(data);
 			results = JSON.parse(data);
-			unq = results.unq;
-			var html = '<div id="results">';
-			if (results.search!=query)
-				html+='<h3>Showing results for' + results.search + '</h3>';
-			html+='<div class="row-md-4">';
-			for (resultsLocator = 0; i<results.json.length || (i%10==0 && i!=0); i++){
-				html+='<div><h1><a href = "' + results.json[i].href + '" target=_blank>' + results.json[i].name + '</a></h1>';
-	    		html+="<h6>By " + results.json[i].author + "</h6>";
-	    		html+='<h4>' + results.json[i].preview +'</h4></div></div>';
+			console.log(results);
+			unqIdentifier = results.unq;
+			var html = '<center>';
+			if (results.closest!=query)
+				html+='<h3>Showing results for' + results.closest + '</h3>';
+			
+			html+='<div id="results"><div class="row-md-4">';
+			for (counter = resultsLocator; counter<results.json.length || ((counter%10==0 && counter!=0) && counter>0); counter++){
+				html+='<div><h1><a href = "' + results.json[counter].href + '" target=_blank>' + results.json[counter].fileName + '</a></h1>';
+	    		html+="<h6>By " + results.json[counter].author + "</h6>";
+	    		html+='<h4>' + results.json[counter].preview +'</h4></div></div>';
 			}
 			html+='<ul>';
-			var counter = 1;
-			for (var i=0; i<results.totalResults; counter++){
-				html+='<li id="'+i+'">'+counter+'</li>';
+			for (var i=0, counter=1; i<results.totalResults && i<110; i++, counter++){
+				html+='<li id="'+(i*10)+'">'+counter+'</li>';
 				i+=10;
 			}
-			html+='</ul></div>';
+			html+='</ul></div></center>';
 			$('main').html(html);
 			$('li').find('#0').attr('font-weight','bold');
-			$('li').on('click', function(){
+			$('li').bind('click', function(da){
+				console.log(event.target);
+				resultsLocator = $(this).attr('id');
+				console.log(resultsLocator);
 				//Ajax call for more results according to locator
 				$.ajax({
 					type:"POST",
 					url:'searchengine.php',
 					data:{search : query, unq : unqIdentifier, locator : resultsLocator},
 					success:function(data){
+						console.log(data);
 						results = JSON.parse(data);
+
 						var html = '<div class="row-md-4">';
-						for (resultsLocator = 0; i<results.json.length || (i%10==0 && i!=0); i++){
-							html+='<div><h1><a href = "' + results.json[i].href + '" target=_blank>' + results.json[i].name + '</a></h1>';
-				    		html+="<h6>By " + results.json[i].author + "</h6>";
-				    		html+='<h4>' + results.json[i].preview +'</h4></div></div>';
+						for (resultsLocator = 0; resultsLocator<results.json.length || ((resultsLocator%10==0 && resultsLocator!=0) && resultsLocator>0); resultsLocator++){
+							html+='<div><h1><a href = "' + results.json[resultsLocator].href + '" target=_blank>' + results.json[resultsLocator].fileName + '</a></h1>';
+				    		html+="<h6>By " + results.json[resultsLocator].author + "</h6>";
+				    		html+='<h4>' + results.json[resultsLocator].preview +'</h4></div></div>';
 						}
 						$('#results').html(html);
 					}
 				});
 				$('main').html(html);
-				$('li').find('#'+currentCounter).attr('font-weight','bold');
+				$('li').find('#'+counter).attr('font-weight','bold');
 			});
 		}
 	});

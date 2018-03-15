@@ -2,6 +2,7 @@
 	$string = isset($_POST['search']) ? $_POST['search'] : '';
 	$unq = isset($_POST['unq']) ? $_POST['unq'] : '';
 	$locator = isset($_POST['locator']) ? $_POST['locator'] : 0;
+
 	//Array of results to return
 	$returnArray = array();
 	$oldSearch = false;
@@ -10,11 +11,17 @@
 	$recentSearches = (array)json_decode(fread($fpRecentSearches, filesize('db/recentsearches.json')),true);
 	fclose($fpRecentSearches);
 	if ($unq!=''){
-		if (array_key_exists($unq, $recentSearches)){
-			$results = $recentSearches[$unq]['json'];
-			echo json_encode(array('unq' => $unq, 'json' => array_slice($results, $locator,$locator+10)));
-			die();
+		foreach ($recentSearches as $key => $value) {
+			if (in_array($unq, $value['unq'])){
+				$results = $recentSearches[$key]['json'];
+				$fpRecentSearches = fopen('db/recentsearches.json','r+');
+				fwrite($fpRecentSearches, json_encode($recentSearches));
+				fclose($fpRecentSearches);
+				echo json_encode(array('unq' => $unq, 'json' => array_slice($results, $locator,$locator+10)));
+				die();
+			}
 		}
+		
 		$oldSearch = true;
 	}
 	//Check top searches, if doesn't exist we go the search in index
@@ -233,7 +240,7 @@
 	$counter = 0;
 	$jsonToSend = array();
 	foreach ($finalResults as $key => $value) {
-		array_push($jsonToSend,array("href" => 'db/'.$key.'.txt','fileName' => $index['files'][$key]['name'], 'author' => $index['files'][$key]['name'], 'preview' => $index['files'][$key]['preview']));
+		array_push($jsonToSend,array("href" => 'db/'.$key.'.txt','fileName' => $index['files'][$key]['name'], 'author' => $index['files'][$key]['author'], 'preview' => $index['files'][$key]['preview']));
 		if (++$counter==10){
 			break;
 		}
@@ -254,8 +261,24 @@
 	fclose($fpTopSearches);
 	//Recent searches
 	$unq = md5(microtime(true));
-	$fpRecentSearches = fopen('db/recentsearches.json','w');
-	fwrite($fpRecentSearches, json_encode(array($unq => array('json' => $jsonToSend,'expire' => strtotime("+20 minutes")))));
+	$fpRecentSearches = fopen('db/recentsearches.json','r+');
+	//$recentSearches = (array)json_decode(fread($fpRecentSearches, filesize('db/recentsearches.json')),true);
+	$existingSearch = false;
+	foreach ($recentSearches as $key => $value) {
+		if ($_POST['search'] == $value['search']){
+			array_push($recentSearches[$key]['unq'],$unq);
+			$recentSearches[$key]['search'] = $_POST['search'];
+			$recentSearches[$key]['expire'] = strtotime("+20 minutes");
+			$existingSearch = true;
+		}
+	}
+	if (!$existingSearch){
+		$recentSearches[$key]['unq'] = array($unq);
+		$recentSearches[$key]['json'] = $jsonToSend;
+		$recentSearches[$key]['expire'] = strtotime("+20 minutes");
+		$recentSearches[$key]['search'] = $_POST['search'];
+	}
+	fwrite($fpRecentSearches, json_encode($recentSearches));
 	fclose($fpRecentSearches);
 
 	//return results
