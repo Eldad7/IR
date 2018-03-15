@@ -194,8 +194,11 @@
 
 	//In case no results from original search
 	if (isset($closestResult) && empty($resultsArray)){
+		$closest = 'true';
 		$resultsArray = $closestResult;
 	}
+	else
+		$closest = 'false';
 
 	//Now we create the json to return
 	//We check if what we searched for is a name of a song - if it is we will put it at the top. If not we will put in the one with the largest number of hits
@@ -256,7 +259,7 @@
 	fclose($fpRecentSearches);
 
 	//return results
-	echo json_encode(array('unq' => $unq, 'json' => $jsonToSend,'totalResults' => count($finalResults)));
+	echo json_encode(array('unq' => $unq, 'json' => $jsonToSend,'totalResults' => count($finalResults),"closest" => $_POST['search']));
 
 	function calculate($arr){
 		$tempArray = array();

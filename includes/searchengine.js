@@ -28,7 +28,10 @@ $(document).ready(function(){
 		success:function(data){
 			results = JSON.parse(data);
 			unq = results.unq;
-			var html = '<div id="results"><div class="row-md-4">';
+			var html = '<div id="results">';
+			if (results.search!=query)
+				html+='<h3>Showing results for' + results.search + '</h3>';
+			html+='<div class="row-md-4">';
 			for (resultsLocator = 0; i<results.json.length || (i%10==0 && i!=0); i++){
 				html+='<div><h1><a href = "' + results.json[i].href + '" target=_blank>' + results.json[i].name + '</a></h1>';
 	    		html+="<h6>By " + results.json[i].author + "</h6>";
