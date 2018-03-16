@@ -46,7 +46,7 @@
 		fwrite($fpNewFile, fread($fpFile,filesize('../toparse/'.$filename)));
 		fclose($fpNewFile);
 		rewind($fpFile);
-		$index['files'][$filenumber] = array('name' => $_POST['filename'],'author' => $author, 'hidden' => 0,"hits" => 0,'preview' => fread($fpFile,150));
+		$index['files'][$filenumber] = array('name' => $_POST['filename'],'author' => $author, 'hidden' => 0,"hits" => 0,'preview' => fread($fpFile,450));
 		ksort($index['index']);
 		fwrite($fpIndex, json_encode($index));
 		fclose($fpFile);		

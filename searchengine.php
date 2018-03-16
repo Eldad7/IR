@@ -31,12 +31,17 @@
 	$bestMatch = 10;
 	//We will use levenshtein algorithm to compare strings
 	foreach (array_slice($topSearches, 0,1000) as $key => $search){
-		$match = abs(levenshtein($string, $search['search'])); //abs(strcmp($string,$search['search']));
+		$match = abs(levenshtein($string, $search['search'])); 
 		if ($match==0){
-			$returnArray = $search['results'];
-			$topSearches[$key]['hits']++;
-			$bestMatch = $match;
-			break;
+			if (count($search['results'])>0){
+				$returnArray = $search['results'];
+				$topSearches[$key]['hits']++;
+				$bestMatch = $match;
+				break;
+			}
+			else{
+				continue;
+			}
 		}
 		//Match result from string compare
 		if ($match<$bestMatch){
@@ -45,7 +50,7 @@
 		$bestMatch = $match;
 	}
 	if (empty($returnArray) && isset($topResult)){
-		$closestResult = $topSearches[$key];
+		$closestResult = $topSearches[$topResult];
 	}
 	//Open Index and stop words
 	$fpIndex = fopen('db/index.json', 'r+');
@@ -77,7 +82,7 @@
 	
 	foreach ($wordsArr as $key => $value) {
 		//For each sentence - we will remove whitespaces and sent it to the calculate function, as words (explode)
-		calculate(explode(' ', trim($value)));
+		calculate($value);
 	}
 
 	//Behavioral flags
@@ -167,7 +172,7 @@
 		if (is_array($value)){
 			foreach ($value as $innerKey => $files) {
 				foreach ($files as $file => $locations) {
-					if (!isset($returnArray[$file]))
+					if (!isset($returnArray[$innerKey]))
 						$returnArray[$innerKey] = array();
 					array_push($returnArray[$innerKey],$locations);
 				}
@@ -200,68 +205,56 @@
 	}
 
 	//In case no results from original search
-	if (isset($closestResult) && empty($resultsArray)){
+	if (isset($closestResult) && empty($returnArray)){
 		$closest = 'true';
-		$resultsArray = $closestResult;
+		$returnArray = $closestResult['results'];
 	}
 	else
 		$closest = 'false';
 
 	//Now we create the json to return
 	//We check if what we searched for is a name of a song - if it is we will put it at the top. If not we will put in the one with the largest number of hits
-	$finalResults = array();
+
 	foreach ($index['files'] as $key => $value) {
 		if (levenshtein($string, $value['name'])<2){
-			$finalResults[$key] = $returnArray[$key];
-			unset($returnArray[$key]);
+			$returnArray[$key]['rank'] = 999999;
 			$index['files'][$key]['hits']++;	
 		}
 		if ($value['hits']<1000)
 			break;
 	}
-	//We will sort the rest of the files that we didn't remove by how many hits it had
-	uksort($returnArray, function($a, $b) {
-		$tmpHitsA = 0;
-		$tmpHitsB = 0;
-		foreach ($GLOBALS['wordHits'] as $key => $value) {
-			foreach ($value as $file => $hits) {
-				//We will compare files hit for each file and return the one who has the most hits, and so we sort it
-				if ($file==array_search($a, $GLOBALS['returnArray']))
-					$tmpHitsA++;
-				if ($file==array_search($b, $GLOBALS['returnArray']))
-					$tmpHitsb++;
-			}
-		}
-		return $tmpHitsA - $tmpHitsB;
-	});
 
-	$finalResults += $returnArray;
+	foreach ($returnArray as $file => $hits) {
+		if (!isset($file['rank']))
+			$returnArray[$file]['rank'] = rank($file);
+	}
+
+	uasort($returnArray, function($a, $b){return $b['rank'] - $a['rank'];});
+
+	foreach ($returnArray as $key => $value) {
+		unset($returnArray[$key]['rank']);
+	}
 
 	$counter = 0;
 	$jsonToSend = array();
-	foreach ($finalResults as $key => $value) {
-		array_push($jsonToSend,array("href" => 'db/'.$key.'.txt','fileName' => $index['files'][$key]['name'], 'author' => $index['files'][$key]['author'], 'preview' => $index['files'][$key]['preview']));
+	foreach ($returnArray as $key => $value) {
+		array_push($jsonToSend,array("href" => $key,'fileName' => $index['files'][$key]['name'], 'author' => $index['files'][$key]['author'], 'preview' => $index['files'][$key]['preview']));
 		if (++$counter==10){
 			break;
 		}
 	}
 
 	//Now we update recent searches and top searches
-	
-	//If this was a match from our top searches
-	//STILL NEEDS WORK!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
-	$fpTopSearches = fopen('db/topsearches.json','w');
-	if ($bestMatch == 0){   		
-		uksort($topSearches, function($a, $b) {return $a['hits'] - $b['hits'];});			
-	}
-	else{
-		array_push($topSearches, array("search" => $_POST['search'],"hits" => 1,"results" => $finalResults));
+	$fpTopSearches = fopen('db/topsearches.json','w+');
+	if ($bestMatch != 0 && $closest!=='true'){   		
+		array_push($topSearches, array("search" => $_POST['search'],"hits" => 1,"results" => $returnArray));			
 	}
 	fwrite($fpTopSearches, json_encode($topSearches));
 	fclose($fpTopSearches);
 	//Recent searches
 	$unq = md5(microtime(true));
-	$fpRecentSearches = fopen('db/recentsearches.json','r+');
+
+	$fpRecentSearches = fopen('db/recentsearches.json','w+');
 	//$recentSearches = (array)json_decode(fread($fpRecentSearches, filesize('db/recentsearches.json')),true);
 	$existingSearch = false;
 	foreach ($recentSearches as $key => $value) {
@@ -272,26 +265,44 @@
 			$existingSearch = true;
 		}
 	}
-	if (!$existingSearch){
-		$recentSearches[$key]['unq'] = array($unq);
-		$recentSearches[$key]['json'] = $jsonToSend;
-		$recentSearches[$key]['expire'] = strtotime("+20 minutes");
-		$recentSearches[$key]['search'] = $_POST['search'];
+	if (!$existingSearch && $closest!='true') {
+		$recentSearches[count($recentSearches)]['unq'] = array($unq);
+		$recentSearches[count($recentSearches)]['json'] = $jsonToSend;
+		$recentSearches[count($recentSearches)]['expire'] = strtotime("+20 minutes");
+		$recentSearches[count($recentSearches)]['search'] = $_POST['search'];
 	}
 	fwrite($fpRecentSearches, json_encode($recentSearches));
 	fclose($fpRecentSearches);
 
+	if ($closest === 'true')
+		$closestQuery = $closestResult['search'];
+	else{
+		$closestQuery = $_POST['search'];
+	}
 	//return results
-	echo json_encode(array('unq' => $unq, 'json' => $jsonToSend,'totalResults' => count($finalResults),"closest" => $_POST['search']));
+	echo json_encode(array('unq' => $unq, 'json' => $jsonToSend,'totalResults' => count($returnArray),"closest" => $closestQuery));
 
-	function calculate($arr){
+	function rank($file){
+		$totalHits = 0;
+		$fileCounter = 0;
+		foreach ($GLOBALS['wordHits'] as $word => $files) {
+			if (array_key_exists($file, $files)){
+				$fileCounter+=1;
+				$totalHits+=$files[$file];
+			}
+		}
+		return ($fileCounter/count($GLOBALS['wordHits'])) * $totalHits;
+	}
+
+	function calculate($string){
+		$arr = explode(' ', trim($string));
 		$tempArray = array();
 		$andFlag = false;
 		//Params for NOT
 		$notFlag = false;
 		//For each word in the combination, we remove end of parenthesis if it contains it
 		foreach ($arr as $key => $value) {
-			$value = str_replace(')', '', $value);
+			$value = strtolower(str_replace(')', '', $value));
 			//If we have a sign (+ - |) and it is not at the end of the combination (FIX for nested parenthesis) - we push the relevant flag to the results array for later use
 			if (strcmp('+',$value)==0){
 				if ($key+1==count($arr)){
@@ -320,12 +331,18 @@
 			else{
 				if ((!in_array($value, $GLOBALS['stopWords'])) && (!in_array($value, array('-','+','-')))){
 					//If it's not in stop words - we search the index
+					$found = false;
 					foreach ($GLOBALS['index']['index'] as $word => $positions) {
 						if (strcmp($value,$word)==0){
 							//If found - we push results
 							array_push($tempArray,array($positions['locations'],$value));
+							$found = true;
 							break;
 						}
+						//If we haven't found the word - return empty array
+					}
+					if (!$found){
+						array_push($tempArray, array(array(),$value));
 					}
 				}
 			}
@@ -406,13 +423,13 @@
 			//Final loop on these hits - we update the wordHits array with the files that contains it and how many times
 			foreach ($files as $key => $value) {
 				if (is_numeric($key)){
-					if (!isset($GLOBALS['wordHits'][$files['Word']][$key]))
+					if (!isset($GLOBALS['wordHits'][$files['Word']][$key])){
 						$GLOBALS['wordHits'][$files['Word']][$key] = 0;
-					$GLOBALS['wordHits'][$files['Word']][$key]++;
+					}
+					$GLOBALS['wordHits'][$files['Word']][$key]+=count($value);
 				}
 			}
 		}
-
 		//We push the results into the global results array, and if we had a flag - we push it after (FIX for nested parenthesis - to keep the order)
 		array_push($GLOBALS['resultsArray'],$resultArray);
 		if (isset($flagToPush))
