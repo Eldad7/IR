@@ -62,7 +62,7 @@
 	$stopWords = (array)json_decode(fread($fpStopWords, filesize('db/stopwords.json')),true);
 	fclose($fpStopWords);
 	//Remove unsearchable characters for index search
-	$string = str_replace(array('.',';',',',':','"',"'",'!','?','/','\n','\r','\n\r','','`','[',']','{','}'), '', $string);
+	$string = str_replace(array('.',';',',',':',"'",'!','?','/','\n','\r','\n\r','','`','[',']','{','}'), '', $string);
 	//Remove whitespaces
 	$string = trim($string);
 	//Create an array of as many sentences as there are parenthesis
@@ -74,7 +74,7 @@
 
 	foreach ($wordHits as $key => $value) {
 		if (!in_array($value, array('+','-','|'))){
-			$value = str_replace(array('(',')'), '', $value);
+			$value = str_replace(array('(',')','"'), '', $value);
 			$wordHits[$value] = array();
 		}
 		unset($wordHits[$key]);
@@ -171,7 +171,9 @@
 		//For regular calculations - if returnArray contains the file - append the locations. If not - create and add locations
 		if (is_array($value)){
 			foreach ($value as $innerKey => $files) {
+				echo $innerKey. '=>';
 				foreach ($files as $file => $locations) {
+					echo $file. '=>'.$locations.'<br/>';
 					if (!isset($returnArray[$innerKey]))
 						$returnArray[$innerKey] = array();
 					array_push($returnArray[$innerKey],$locations);
@@ -297,6 +299,8 @@
 	function calculate($string){
 		$arr = explode(' ', trim($string));
 		$tempArray = array();
+		$apostropheFlag = false;
+		$apostropheArr = array();
 		$andFlag = false;
 		//Params for NOT
 		$notFlag = false;
@@ -304,7 +308,22 @@
 		foreach ($arr as $key => $value) {
 			$value = strtolower(str_replace(')', '', $value));
 			//If we have a sign (+ - |) and it is not at the end of the combination (FIX for nested parenthesis) - we push the relevant flag to the results array for later use
-			if (strcmp('+',$value)==0){
+			if (strpos($value, '"') || substr($value, 0,1)=='"' || $apostropheFlag){
+				array_push($apostropheArr, $value);
+				
+				if (!$apostropheFlag){
+					$apostropheFlag=true;
+					continue;
+				}
+				else{
+					if (strpos($value, '"') || substr($value, 0,1)=='"'){
+						$apostropheFlag = false;
+						array_push($GLOBALS['resultsArray'],apostropheCalculation($apostropheArr));
+					}
+				}
+			}
+
+			else if (strcmp('+',$value)==0){
 				if ($key+1==count($arr)){
 					$flagToPush = $value;
 				}
@@ -434,5 +453,104 @@
 		array_push($GLOBALS['resultsArray'],$resultArray);
 		if (isset($flagToPush))
 			array_push($GLOBALS['resultsArray'],$flagToPush);
+	}
+
+	function apostropheCalculation($arr){
+		$tempArray = array();
+		$apostropheArray = array();
+		foreach ($arr as $key => $value) {
+			$value = str_replace('"', '', $value);
+			if (!in_array($value, array('-','+','-'))) {
+				//If it's not in stop words - we search the index
+				$found = false;
+				foreach ($GLOBALS['index']['index'] as $word => $positions) {
+
+					if (strcmp($value,$word)==0){
+						//If found - we push results
+						array_push($tempArray,array($positions['locations'],$value));
+						$found = true;
+						break;
+					}
+					//If we haven't found the word - return empty array
+				}
+				if (!$found){
+					array_push($tempArray, array(array(),$value));
+				}
+			}
+		}
+		foreach ($tempArray as $tmpKey => $tmpArray) {
+			if (is_array($tmpArray)){
+				$apostropheArray[$tmpKey] = array();
+				foreach ($tmpArray[0] as $key => $value){
+					$locations = explode(',', $value);
+					if ($GLOBALS['index']['files'][$locations[0]]['hidden']!=1){
+						array_push($apostropheArray[$tmpKey],$value);
+					}
+				}
+			}
+			else
+				//Sign - + - |
+				return array();
+		}
+
+		$resultArray = array();
+		for ($i=count($apostropheArray)-1; $i > 0 ; $i--) { 
+			$tmpArray = array();
+		 	foreach ($apostropheArray[$i] as $locations) {
+		 		$tmpLocations = explode(',', $locations);
+		 		foreach ($apostropheArray[$i-1] as $key => $value) {
+			 		$secondLocations = explode(',', $value);
+			 		if ($secondLocations[0] == $tmpLocations[0]){
+			 			array_push($tmpArray,$value);
+			 		}
+			 	}
+		 	}
+		 	$tmpArray = array_unique($tmpArray);
+		 	foreach ($apostropheArray[$i] as $locations) {
+		 		$tmpLocations = explode(',', $locations);
+			 	foreach ($tmpArray as $key => $value) {
+			 		$secondLocations = explode(',', $value);
+			 		if ($tmpLocations[1] == $secondLocations[1] && $tmpLocations[0] == $secondLocations[0]){
+			 			if ($tmpLocations[2] == $secondLocations[2]+1){
+			 				array_push($resultArray,$locations);
+			 				array_push($resultArray,$value);
+			 			}
+			 		}
+			 		if ($tmpLocations[1] == $secondLocations[1]-1 && $tmpLocations[2] == 0 && $tmpLocations[0] == $secondLocations[0]){
+							array_push($resultArray,$locations);
+			 				array_push($resultArray,$value);
+			 		}
+
+			 	}
+			 }
+			 		
+		 }
+		 $resultArray = array_unique($resultArray);
+		 sort($resultArray);
+		 $returnArray = array();
+
+		 $counter = count($arr)-1;
+		 for ($i=0; $i < count($resultArray); $i++, $counter--) { 
+		 	if ($counter==0){
+		 		array_push($returnArray,array_slice($resultArray, $i-count($arr)+1,$i+1));
+		 		$counter = count($arr);
+		 	}
+		 }
+		 $resultArray = array();
+		 for ($i=0; $i<count($returnArray); $i++){
+		 	$tmpFile = substr($returnArray[$i][0], 0,1);
+		 	if (!isset($resultArray[$tmpFile]))
+		 		$resultArray[$tmpFile] = array();
+		 	foreach ($arr as $key => $value) {
+		 		if (!isset($GLOBALS['wordHits'][$value][$tmpFile] )){
+					$GLOBALS['wordHits'][$value][$tmpFile] = 0;
+				}
+				$GLOBALS['wordHits'][$value][$tmpFile]++;
+		 	}
+		 	foreach ($returnArray[$i] as $lkey => $location) {
+		 		array_push($resultArray[$tmpFile],$location);
+		 	}
+		}
+		return $resultArray;
 	}
 ?>

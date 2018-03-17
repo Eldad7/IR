@@ -83,10 +83,22 @@ $(document).ready(function(){
 		  	"class": "file-list",
 		  	html: list.join(""),
 		  	change: function(){
-		  		$("#results").html(details[$('select option:selected').attr('id')]);
+		  		$("#results").html(details[$('select option:selected').attr('id')]+'<br/><div><button onClick="receiveAll();">Receive All Files</button>');
 		  	}
 		  }).appendTo("main");
-		  $('#results').html(details[0]);
+		  $('#results').html(details[0]+'<br/><div><button onClick="receiveAll();">Receive All Files</button>');
+
 		});
 	});
 });
+
+function receiveAll(){
+	$.ajax({
+  		url:'receiveall.php',
+  		type:'POST',
+  		success:function(data){
+  			console.log(data);
+  			alert(data);
+  		}
+  	});
+}
