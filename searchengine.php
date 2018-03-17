@@ -171,9 +171,7 @@
 		//For regular calculations - if returnArray contains the file - append the locations. If not - create and add locations
 		if (is_array($value)){
 			foreach ($value as $innerKey => $files) {
-				echo $innerKey. '=>';
 				foreach ($files as $file => $locations) {
-					echo $file. '=>'.$locations.'<br/>';
 					if (!isset($returnArray[$innerKey]))
 						$returnArray[$innerKey] = array();
 					array_push($returnArray[$innerKey],$locations);
