@@ -83,10 +83,10 @@ $(document).ready(function(){
 		  	"class": "file-list",
 		  	html: list.join(""),
 		  	change: function(){
-		  		$("#results").html(details[$('select option:selected').attr('id')]+'<br/><div><button onClick="receiveAll();">Receive All Files</button>');
+		  		$("#results").html(details[$('select option:selected').attr('id')]);
 		  	}
 		  }).appendTo("main");
-		  $('#results').html(details[0]+'<br/><div><button onClick="receiveAll();">Receive All Files</button>');
+		  $('#results').html(details[0]);
 
 		});
 	});
