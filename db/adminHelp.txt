@@ -1,0 +1,13 @@
+Welcome to the admin interface!
+<br/><br/>
+From here you can either: <br/>
+• Parse a new file or files from the incoming folder</br>
+• Manage all existing files</br>
+<br/>
+<b>Parse new file:</b><br/>
+When you press on Parse new file you will have a list option of all the files waiting to be parsed. All you need to add is the name of the author and press submit. The file will be parsed, added to the DB and deleted from the incoming folder. A copy will be saved in our DB.
+<br/><br/>
+<b>Manage existing files:</b><br/>
+When you choose this option you will get a list of all the files in the DB, 10 by 10.
+On the top left corner you will have a checkbox. This checkbox chooses if a file is visible to the customer or not.
+If you want to hide the visibility of the file, you need to uncheck the checkbox.

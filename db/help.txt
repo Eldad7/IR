@@ -1,0 +1,21 @@
+Welcome to E&B search engine! <br/>
+Here you can search for any poem you want.
+<br/><br/>
+<b>Instructions:</b><br/>
+• Enter your query to the search field and click search. That's it!<br/>
+• The engine will show only the first 10 results. To load more results you can navigate as per pages shown below.<br/>
+• Our engine will always sort the results by relevance to your search.<br/>
+• To open the song, you need to press on the title.<br/>
+<br/>
+<b>More complex queries:</b><br/>
+You can make a more complex query using the following syntax:<br/>
+• And / Or / Not - You can use all of these three parameters using the following: + for And, - for Not, | for Or. Another option is to press on the And, Or, Not buttons which will add these parameters to your query. <b>Please keep the below format</b><br/>
+Examples: Love + Peace, Peace + - Love, Love | Peace, etc.
+<br/><br/>
+• Parenthesis - You can make a more complex query using parenthesis. Our system support second and third level of parenthesis so you need not worry, just keep the below format:<br/>
+Love + (Peace | War), Peace + (Love | (War + - Hate)), etc.<br/>
+<br/>
+• Quotation marks: You can use quotation marks to find a specific term or a phrase. You can use this along with Parenthesis, And/Or/Not symbols in the same sentence.<br/>
+The format: "Love and Peace"<br/>
+<br/>
+Enjoy our Search Engine
