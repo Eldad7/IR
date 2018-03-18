@@ -86,6 +86,7 @@ $(document).ready(function(){
 		  		$("#results").html(details[$('select option:selected').attr('id')]);
 		  	}
 		  }).appendTo("main");
+		  $('#results').html(details[0]);
 
 		});
 	});
